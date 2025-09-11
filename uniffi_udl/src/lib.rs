@@ -21,6 +21,10 @@ use anyhow::Result;
 use collectors::{InterfaceCollector, TypeCollector};
 use uniffi_meta::Type;
 
+use lalrpop_util::lalrpop_mod;
+
+lalrpop_mod!(udl);
+
 /// The single entry-point to this module.
 pub fn parse_udl(udl: &str, crate_name: &str) -> Result<uniffi_meta::MetadataGroup> {
     Ok(InterfaceCollector::from_webidl(udl, crate_name)?.into())

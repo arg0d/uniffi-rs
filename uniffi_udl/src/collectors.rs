@@ -31,15 +31,38 @@ impl InterfaceCollector {
         // There's some lifetime thing with the errors returned from weedle::Definitions::parse
         // that my own lifetime is too short to worry about figuring out; unwrap and move on.
 
-        // Note we use `weedle::Definitions::parse` instead of `weedle::parse` so
-        // on parse errors we can see how far weedle got, which helps locate the problem.
-        use weedle::Parse; // this trait must be in scope for parse to work.
-        let (remaining, defns) = weedle::Definitions::parse(idl.trim()).unwrap();
-        if !remaining.is_empty() {
-            println!("Error parsing the IDL. Text remaining to be parsed is:");
-            println!("{remaining}");
-            bail!("parse error");
-        }
+        let defns = match crate::udl::UdlParser::new().parse(&idl) {
+            Ok(defns) => defns,
+            Err(err) => {
+                let (message, location, _expected) = match err {
+                    lalrpop_util::ParseError::InvalidToken { location } => ("invalid token", location, vec![]),
+                    lalrpop_util::ParseError::UnrecognizedEof { location, expected } => ("unexpected EOF", location, expected),
+                    lalrpop_util::ParseError::UnrecognizedToken { token, expected } => ("unexpected token", token.0, expected),
+                    lalrpop_util::ParseError::ExtraToken { token } => ("extra token", token.0, vec![]),
+                    lalrpop_util::ParseError::User { error } => panic!("unexpected user error {:?}", error),
+                    // _ => panic!("{}", err),
+                };
+
+                let (line, column) = index_to_line_column(&idl, location);
+                println!("    --> {} at {}:{}:{}", message, "TODO<FILE_PATH>", line, column);
+                display_source(&idl, line, column);
+                // if _expected.len() > 0 {
+                //     println!("     | expected one of {:?}", _expected);
+                // }
+                println!("");
+                bail!("parse error");
+            }
+        };
+
+        // // Note we use `weedle::Definitions::parse` instead of `weedle::parse` so
+        // // on parse errors we can see how far weedle got, which helps locate the problem.
+        // use weedle::Parse; // this trait must be in scope for parse to work.
+        // let (remaining, defns) = weedle::Definitions::parse(idl.trim()).unwrap();
+        // if !remaining.is_empty() {
+        //     println!("Error parsing the IDL. Text remaining to be parsed is:");
+        //     println!("{remaining}");
+        //     bail!("parse error");
+        // }
         // We process the WebIDL definitions in 3 passes.
         // First, find the namespace.
         // XXX - TODO: it's no longer necessary to do this pass.
@@ -283,5 +306,56 @@ impl TypeCollector {
     /// it to the set of all types seen in the component interface.
     pub fn resolve_type_expression<T: TypeResolver>(&mut self, expr: T) -> Result<Type> {
         expr.resolve_type_expression(self)
+    }
+}
+
+fn index_to_line_column(s: &str, index: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut column = 1;
+    let mut i = 0;
+    let chars: Vec<char> = s.chars().collect();
+
+    while i < index && i < chars.len() {
+        match chars[i] {
+            '\n' => {
+                line += 1;
+                column = 1;
+            }
+            '\r' => {
+                if i + 1 < chars.len() && chars[i + 1] == '\n' {
+                    i += 1; // Skip the '\n' following '\r'
+                }
+                line += 1;
+                column = 1;
+            }
+            _ => {
+                column += 1;
+            }
+        }
+        i += 1;
+    }
+
+    (line, column)
+}
+
+fn display_source(file_content: &str, error_line: usize, error_column: usize) {
+    let lines: Vec<&str> = file_content.lines().collect();
+
+    if error_line > lines.len() {
+        panic!("Error line {} is out of range", error_line);
+    }
+
+    let start_line = if error_line > 3 { error_line - 3 } else { 1 };
+
+    for i in start_line..=error_line {
+        if i <= lines.len() {
+            let line = lines[i - 1]; // Convert 1-based index to 0-based index
+            println!("{:>4} | {}", i, line);
+            if i == error_line {
+                // Print the caret indicator at the error column
+                let padding = " ".repeat(error_column - 1);
+                println!("     | {}^", padding);
+            }
+        }
     }
 }
