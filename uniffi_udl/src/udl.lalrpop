@@ -12,7 +12,7 @@ match {
 pub Udl: Vec<weedle::Definition<'input>> = definition*;
 
 definition: weedle::Definition<'input> = {
-    // namespace_defn => weedle::Definition::Namespace { 0: <> },
+    namespace => weedle::Definition::Namespace(<>),
     // function_defn,
     enum_defn => weedle::Definition::Enum { 0: <> },
     dictionary_defn => weedle::Definition::Dictionary { 0: <> },
@@ -20,24 +20,24 @@ definition: weedle::Definition<'input> = {
     // typedef,
 };
 
-// namespace_defn: weedle::NamespaceDefinition<'input>= "namespace" <i:ident> "{" <members:Braced<namespace_member_defn*>> "}" ";"
-//     => weedle::NamespaceDefinition {
-//         docstring: None,
-//         attributes: None,
-//         namespace: weedle::term::Namespace,
-//         identifier: weedle::common::Identifier(i),
-//         members: members,
-//         semi_colon: weedle::term::SemiColon,
-    // };
+namespace: weedle::NamespaceDefinition<'input> = <attr:extended_attribute_list?> "namespace" <ident:ident_defn> "{" <members:Braced<namespace_member*>> "}" ";"
+    => weedle::NamespaceDefinition {
+        docstring: None,
+        attributes: attr,
+        namespace: weedle::term::NameSpace,
+        identifier: ident,
+        members: members,
+        semi_colon: weedle::term::SemiColon,
+    };
 
-dictionary_defn: weedle::DictionaryDefinition<'input> = "dictionary" <i:ident> "{" <members:dictionary_member_defn*> "}" ";"
+dictionary_defn: weedle::DictionaryDefinition<'input> = "dictionary" <i:ident> <members:Braced<dictionary_member_defn*>> ";"
     => weedle::DictionaryDefinition {
         docstring: None,
         attributes: None,
         dictionary: weedle::term::Dictionary,
         identifier: weedle::common::Identifier(i),
         inheritance: None,
-        members: weedle::common::Braced { body: members, open_brace: weedle::term::OpenBrace, close_brace: weedle::term::CloseBrace },
+        members: members,
         semi_colon: weedle::term::SemiColon,
     };
 
@@ -227,9 +227,29 @@ enum_variant_defn: weedle::EnumVariant<'input> = string_literal
         value: <>,
     };
 
-// namespace_member_defn: weedle::namespace::NamespaceMember<'input> = namespace_operation_defn => weedle::namespace::NamespaceMember::Operation(<>);
+namespace_member: weedle::namespace::NamespaceMember<'input> = {
+    <attr:extended_attribute_list?> <type_:return_type> <ident:ident_defn?> <args:Parenthesized<argument_list>> ";"
+        => weedle::namespace::NamespaceMember::Operation(weedle::namespace::OperationNamespaceMember {
+            docstring: None,
+            attributes: attr,
+            return_type: type_,
+            identifier: ident,
+            args: args,
+            semi_colon: weedle::term::SemiColon,
+        }),
+    <attr:extended_attribute_list?> "readonly" "attribute" <type_:attributed_type> <ident:ident_defn> ";"
+        => weedle::namespace::NamespaceMember::Attribute(weedle::namespace::AttributeNamespaceMember {
+            docstring: None,
+            attributes: attr,
+            readonly: weedle::term::ReadOnly,
+            attribute: weedle::term::Attribute,
+            type_: type_,
+            identifier: ident,
+            semi_colon: weedle::term::SemiColon,
+        }),
+};
 
-// namespace_operation_defn: weedle::namespace::OperationNamespaceMember<'input> = <rt:return_type_defn> <ident:ident_defn?> Parenthesized<Punctuated<argument_defn>> ";"
+// namespace_operation_defn: weedle::namespace::OperationNamespaceMember<'input> = <rt:return_type> <ident:ident_defn?> Parenthesized<Punctuated<argument_defn>> ";"
 //     => weedle::namespace::OperationNamespaceMember {
 //         docstring: None,
 //         attributes: None,
@@ -239,35 +259,47 @@ enum_variant_defn: weedle::EnumVariant<'input> = string_literal
 //         semi_colon: term!(;),
 //     };
 
-return_type_defn: weedle::types::ReturnType<'input> = {
+return_type: weedle::types::ReturnType<'input> = {
     term_undefined => weedle::types::ReturnType::Undefined(<>),
     type_defn => weedle::types::ReturnType::Type(<>),
 };
 
-// argument_defn: weedle::argument::Argument<'input> = 
+attributed_type: weedle::types::AttributedType<'input> = <attr:extended_attribute_list?> <type_:type_defn>
+    => weedle::types::AttributedType { attributes: attr, type_: type_ };
 
-// single_argument: weedle::Argument::SingleArgument = <opt:term_optional?>
-//     => weedle::argument::SingleArgument {
-//         attributes: None,
-//         optional: opt,
-//         type_: AttributedType<'a>,
-//         identifier: Identifier<'a>,
-//         default: Option<Default<'a>> = nom::combinator::map(
-//             nom::combinator::cond(optional.is_some(), weedle!(Option<Default<'a>>)),
-//             |default| default.unwrap_or(None)
-//         ),
-//     }
+attributed_non_any_type: weedle::types::AttributedNonAnyType<'input> = <attr:extended_attribute_list?> <type_:non_any_type>
+    => weedle::types::AttributedNonAnyType { attributes: attr, type_: type_ };
+
+argument_list = Punctuated<argument>;
+
+argument: weedle::argument::Argument<'input> = {
+    <attr:extended_attribute_list?> <optional:term_optional?> <type_:attributed_type> <ident:ident_defn> <default:default_defn?>
+        => weedle::argument::Argument::Single(weedle::argument::SingleArgument {
+            attributes: attr,
+            optional: optional,
+            type_: type_,
+            identifier: ident,
+            default: default,
+        }),
+    <attr:extended_attribute_list?> <type_:type_defn> "..." <ident:ident_defn>
+        => weedle::argument::Argument::Variadic(weedle::argument::VariadicArgument {
+            attributes: attr,
+            type_: type_,
+            ellipsis: weedle::term::Ellipsis,
+            identifier: ident,
+        }),
+};
+
+extended_attribute_list = Bracketed<Punctuated<extended_attribute_defn>>;
 
 extended_attribute_defn: weedle::attribute::ExtendedAttribute<'input> = {
     // `Constructor(double x, double y)`
-    // TODO: argument list
-    // <ident:ident_defn> <args:Parenthesized<argument_list>>
-    //     => weedle::attribute::ExtendedAttribute::ArgList(weedle::attribute::ExtendedAttributeArgList { identifier: ident, args: args }),
+    <ident:ident_defn> <args:Parenthesized<argument_list>>
+        => weedle::attribute::ExtendedAttribute::ArgList(weedle::attribute::ExtendedAttributeArgList { identifier: ident, args: args }),
 
     // `NamedConstructor=Image(DOMString src)`
-    // TODO: argument list
-    // <lhs:ident_defn> "=" <rhs:ident_defn> <args:Parenthesized<argument_list>>
-    //     => weedle::attribute::ExtendedAttribute::NamedArgList(weedle::attribute::ExtendedAttributeNamedArgList { lhs_identifier: lhs, assign: weedle::term::Assign, rhs_identifier: rhs, args: args }),
+    <lhs:ident_defn> "=" <rhs:ident_defn> <args:Parenthesized<argument_list>>
+        => weedle::attribute::ExtendedAttribute::NamedArgList(weedle::attribute::ExtendedAttributeNamedArgList { lhs_identifier: lhs, assign: weedle::term::Assign, rhs_identifier: rhs, args: args }),
 
     // `Exposed=(Window,Worker)`
     <ident:ident_defn> "=" <list: Parenthesized<Punctuated<ident_defn>>>
@@ -362,8 +394,11 @@ Comma1<T>: Vec<T> = {
   <mut v:(<T> ",")*> <last:T> (",")? => { v.push(last); v }
 };
 
+Bracketed<T>: weedle::common::Bracketed<T> = "[" <T> "]"
+    => weedle::common::Bracketed { open_bracket: weedle::term::OpenBracket, body: <>, close_bracket: weedle::term::CloseBracket };
+
 Braced<T>: weedle::common::Braced<T> = "{" <T> "}"
-    => weedle::common::Braced { body: <>, open_brace: weedle::term::OpenBrace, close_brace: weedle::term::CloseBrace };
+    => weedle::common::Braced { open_brace: weedle::term::OpenBrace, body: <>, close_brace: weedle::term::CloseBrace };
 
 Punctuated<T>: weedle::common::Punctuated<T, weedle::term::Comma> = Comma0<T>
     => weedle::common::Punctuated { list: <>, separator: weedle::term::Comma };
