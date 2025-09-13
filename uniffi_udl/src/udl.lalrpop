@@ -29,34 +29,34 @@ namespace: weedle::NamespaceDefinition<'input> = <attr:extended_attribute_list?>
         semi_colon: weedle::term::SemiColon,
     };
 
-enum_: weedle::EnumDefinition<'input> = "enum" <ident:ident> <braced:Braced<PunctuatedNonEmpty<enum_variant_defn>>> ";"
+enum_: weedle::EnumDefinition<'input> = <attr:extended_attribute_list?> "enum" <ident:ident_defn> <braced:Braced<PunctuatedNonEmpty<enum_variant_defn>>> ";"
     => weedle::EnumDefinition {
         docstring: None,
-        attributes: None,
+        attributes: attr,
         enum_: weedle::term::Enum,
-        identifier: weedle::common::Identifier(ident),
+        identifier: ident,
         values: braced,
         semi_colon: weedle::term::SemiColon,
     };
 
-dictionary: weedle::DictionaryDefinition<'input> = "dictionary" <ident:ident> <members:Braced<dictionary_member_defn*>> ";"
+dictionary: weedle::DictionaryDefinition<'input> = "dictionary" <ident:ident_defn> <members:Braced<dictionary_member*>> ";"
     => weedle::DictionaryDefinition {
         docstring: None,
         attributes: None,
         dictionary: weedle::term::Dictionary,
-        identifier: weedle::common::Identifier(ident),
+        identifier: ident,
         inheritance: None,
         members: members,
         semi_colon: weedle::term::SemiColon,
     };
 
-dictionary_member_defn: weedle::dictionary::DictionaryMember<'input> = <required:term_required?> <type_:type_defn> <ident:ident> <default:default_defn?> ";"
+dictionary_member: weedle::dictionary::DictionaryMember<'input> = <required:term_required?> <type_:type_defn> <ident:ident_defn> <default:default_defn?> ";"
     => weedle::dictionary::DictionaryMember {
         docstring: None,
         attributes: None,
         required: required,
         type_: type_,
-        identifier: weedle::common::Identifier(ident),
+        identifier: ident,
         default: default,
         semi_colon: weedle::term::SemiColon,
     };
@@ -372,32 +372,6 @@ term_undefined: weedle::term::Undefined = "undefined" => weedle::term::Undefined
 term_optional: weedle::term::Optional = "optional" => weedle::term::Optional;
 term_readonly: weedle::term::ReadOnly = "readonly" => weedle::term::ReadOnly;
 
-dictionary_field = parameter ";";
-
-attribute: () = "[" attribute_list "]";
-attribute_list: () = {
-    attribute_list "," attribute_definition,
-    attribute_definition,
-};
-attribute_definition: () = {
-    ident,
-    ident "=" ident,
-    ident "=" string_literal,
-    ident "=" "(" attribute_tuple ")",
-};
-attribute_tuple: () = {
-    attribute_tuple "," ident,
-    ident,
-}
-
-function = attribute? type_? ident "(" parameter_list ")" ";";
-parameter = "required"? "optional"? attribute? type_ ident ("=" literal)?;
-parameter_list: () = {
-    parameter_list "," parameter,
-    parameter,
-    (),
-};
-
 enum_variant_defn: weedle::EnumVariant<'input> = string_literal
     => weedle::EnumVariant {
         docstring: None,
@@ -489,55 +463,26 @@ identifier_or_string: weedle::attribute::IdentifierOrString<'input> = {
     string_literal => weedle::attribute::IdentifierOrString::String(<>),
 };
 
-typedef = attribute? "typedef" type_ ident ";";
-
-type_: () = {
-    type_ "<" generic_type_list ">",
-    type_ "?",
-    type_ident,
-};
-generic_type_list: () = {
-    generic_type_list "," type_,
-    type_,
-};
-
-literal: () = {
-    "[" literal_array "]",
-    string_literal,
-    "null",
-    // decimal_literal,
-    // hex_literal,
-    float_literal,
-};
-
 // match everything between "" except "^
 string_literal: weedle::literal::StringLit<'input> = r#""[^"]*""# => weedle::literal::StringLit(<>);
-
-literal_array: () = {
-    literal_array "," literal,
-    literal,
-    (),
-};
-// decimal_literal = r"-?[0-9]*";
-// hex_literal = r"-?0x[0-9a-fA-F]*";
 
 // Name identifier. The additional tokens must be manually listed to be
 // considered valid identifiers.
 // https://github.com/lalrpop/lalrpop/issues/904
-ident: &'input str = {
-    type_ident,
-    "callback",
-    "dictionary",
-    "enum",
-    "false",
-    "interface",
-    "namespace",
-    "null",
-    "optional",
-    "required",
-    "true",
-    "typedef",
-};
+// ident: &'input str = {
+//     type_ident,
+//     "callback",
+//     "dictionary",
+//     "enum",
+//     "false",
+//     "interface",
+//     "namespace",
+//     "null",
+//     "optional",
+//     "required",
+//     "true",
+//     "typedef",
+// };
 
 // Type identifier. The above additional tokens from name identifier
 // are not valid type identifiers, i.e. type can't be named 'dictionary'
