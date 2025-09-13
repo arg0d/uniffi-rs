@@ -13,9 +13,8 @@ pub Udl: Vec<weedle::Definition<'input>> = definition*;
 
 definition: weedle::Definition<'input> = {
     namespace => weedle::Definition::Namespace(<>),
-    // function_defn,
-    enum_defn => weedle::Definition::Enum { 0: <> },
-    dictionary_defn => weedle::Definition::Dictionary { 0: <> },
+    enum_ => weedle::Definition::Enum { 0: <> },
+    dictionary => weedle::Definition::Dictionary { 0: <> },
     // interface,
     // typedef,
 };
@@ -30,7 +29,17 @@ namespace: weedle::NamespaceDefinition<'input> = <attr:extended_attribute_list?>
         semi_colon: weedle::term::SemiColon,
     };
 
-dictionary_defn: weedle::DictionaryDefinition<'input> = "dictionary" <ident:ident> <members:Braced<dictionary_member_defn*>> ";"
+enum_: weedle::EnumDefinition<'input> = "enum" <ident:ident> <braced:Braced<PunctuatedNonEmpty<enum_variant_defn>>> ";"
+    => weedle::EnumDefinition {
+        docstring: None,
+        attributes: None,
+        enum_: weedle::term::Enum,
+        identifier: weedle::common::Identifier(ident),
+        values: braced,
+        semi_colon: weedle::term::SemiColon,
+    };
+
+dictionary: weedle::DictionaryDefinition<'input> = "dictionary" <ident:ident> <members:Braced<dictionary_member_defn*>> ";"
     => weedle::DictionaryDefinition {
         docstring: None,
         attributes: None,
@@ -212,16 +221,6 @@ parameter_list: () = {
     parameter,
     (),
 };
-
-enum_defn: weedle::EnumDefinition<'input> = "enum" <ident:ident> <braced:Braced<PunctuatedNonEmpty<enum_variant_defn>>> ";"
-    => weedle::EnumDefinition {
-        docstring: None,
-        attributes: None,
-        enum_: weedle::term::Enum,
-        identifier: weedle::common::Identifier(ident),
-        values: braced,
-        semi_colon: weedle::term::SemiColon,
-    };
 
 enum_variant_defn: weedle::EnumVariant<'input> = string_literal
     => weedle::EnumVariant {
