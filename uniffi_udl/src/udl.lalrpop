@@ -13,9 +13,9 @@ pub Udl: Vec<weedle::Definition<'input>> = definition*;
 
 definition: weedle::Definition<'input> = {
     namespace => weedle::Definition::Namespace(<>),
-    enum_ => weedle::Definition::Enum { 0: <> },
-    dictionary => weedle::Definition::Dictionary { 0: <> },
-    // interface,
+    enum_ => weedle::Definition::Enum(<>),
+    dictionary => weedle::Definition::Dictionary(<>),
+    interface => weedle::Definition::Interface(<>),
     // typedef,
 };
 
@@ -60,6 +60,61 @@ dictionary_member_defn: weedle::dictionary::DictionaryMember<'input> = <required
         default: default,
         semi_colon: weedle::term::SemiColon,
     };
+
+interface: weedle::InterfaceDefinition<'input> = <attr:extended_attribute_list?> "interface" <ident:ident_defn> <inheritance:inheritance?> <members:Braced<interface_member*>> ";"
+    => weedle::InterfaceDefinition {
+        docstring: None,
+        attributes: attr,
+        interface: weedle::term::Interface,
+        identifier: ident,
+        inheritance: inheritance,
+        members: members,
+        semi_colon: weedle::term::SemiColon,
+    };
+
+inheritance: weedle::interface::Inheritance<'input> = ":" <ident_defn> => weedle::interface::Inheritance { colon: weedle::term::Colon, identifier: <> };
+
+interface_member: weedle::interface::InterfaceMember<'input> = {
+    <attr:extended_attribute_list?> "const" <const_type:const_type> <ident:ident_defn> "=" <const_value:const_value> ";"
+        => weedle::interface::InterfaceMember::Const(weedle::interface::ConstMember {
+            attributes: attr,
+            const_: weedle::term::Const,
+            const_type: const_type,
+            identifier: ident,
+            assign: weedle::term::Assign,
+            const_value: const_value,
+            semi_colon: weedle::term::SemiColon,
+        }),
+
+    <attr:extended_attribute_list?> <modifier:stringifier_or_inherit_or_static?> <readonly:term_readonly?> "attribute" <type_:attributed_type> <ident:ident_defn> ";"
+        => weedle::interface::InterfaceMember::Attribute(weedle::interface::AttributeInterfaceMember {
+            attributes: attr,
+            modifier: modifier,
+            readonly: readonly,
+            attribute: weedle::term::Attribute,
+            type_: type_,
+            identifier: ident,
+            semi_colon: weedle::term::SemiColon,
+        }),
+};
+
+special: weedle::interface::Special = {
+    "getter" => weedle::interface::Special::Getter(weedle::term::Getter),
+    "setter" => weedle::interface::Special::Setter(weedle::term::Setter),
+    "deleter" => weedle::interface::Special::Deleter(weedle::term::Deleter),
+    "legacycaller" => weedle::interface::Special::LegacyCaller(weedle::term::LegacyCaller),
+};
+
+stringifier_or_inherit_or_static: weedle::interface::StringifierOrInheritOrStatic = {
+    "stringifier" => weedle::interface::StringifierOrInheritOrStatic::Stringifier(weedle::term::Stringifier),
+    "inherit" => weedle::interface::StringifierOrInheritOrStatic::Inherit(weedle::term::Inherit),
+    "static" => weedle::interface::StringifierOrInheritOrStatic::Static(weedle::term::Static),
+};
+
+stringifier_or_static: weedle::interface::StringifierOrStatic = {
+    "stringifier" => weedle::interface::StringifierOrStatic::Stringifier(weedle::term::Stringifier),
+    "static" => weedle::interface::StringifierOrStatic::Static(weedle::term::Static),
+};
 
 type_defn: weedle::types::Type<'input> = {
     "any" => weedle::types::Type::Single(weedle::types::SingleType::Any(weedle::term::Any)),
@@ -146,7 +201,7 @@ record_key_type: weedle::types::RecordKeyType<'input> = {
     non_any_type => weedle::types::RecordKeyType::NonAny(<>),
 };
 
-ident_defn: weedle::common::Identifier<'input> = r"[a-zA-Z_][a-zA-Z0-9_]*" => weedle::common::Identifier(<>);
+ident_defn: weedle::common::Identifier<'input> = r#"[a-zA-Z_][a-zA-Z0-9_]*"# => weedle::common::Identifier(<>);
 
 MayBeNull<T>: weedle::types::MayBeNull<T> = <t:T> <qmark:term_qmark?> => weedle::types::MayBeNull { type_: t, q_mark: qmark };
 
@@ -161,10 +216,39 @@ default_defn: weedle::common::Default<'input> = "=" <default:default_value_defn>
     };
 
 default_value_defn: weedle::literal::DefaultValue<'input> = {
-    r"-?[1-9][0-9]*" => weedle::literal::DefaultValue::Integer(weedle::literal::IntegerLit::Dec(weedle::literal::DecLit(<>))),
-    r"-?0[Xx][0-9A-Fa-f]+" => weedle::literal::DefaultValue::Integer(weedle::literal::IntegerLit::Hex(weedle::literal::HexLit(<>))),
-    r"-?0[0-7]*" => weedle::literal::DefaultValue::Integer(weedle::literal::IntegerLit::Oct(weedle::literal::OctLit(<>))),
+    boolean_literal => weedle::literal::DefaultValue::Boolean(<>),
+    "[]" => weedle::literal::DefaultValue::EmptyArray(weedle::literal::EmptyArrayLit { open_bracket: weedle::term::OpenBracket, close_bracket: weedle::term::CloseBracket }),
+    "{}" => weedle::literal::DefaultValue::EmptyDictionary(weedle::literal::EmptyDictionaryLit { open_brace: weedle::term::OpenBrace, close_brace: weedle::term::CloseBrace }),
+    integer_literal => weedle::literal::DefaultValue::Integer(<>),
+    float_literal => weedle::literal::DefaultValue::Float(<>),
+    "null" => weedle::literal::DefaultValue::Null(weedle::term::Null),
+    string_literal => weedle::literal::DefaultValue::String(<>),
+};
+
+boolean_literal: weedle::literal::BooleanLit = {
+    "false" => weedle::literal::BooleanLit(false),
+    "true" => weedle::literal::BooleanLit(true),
 }
+
+integer_literal: weedle::literal::IntegerLit<'input> = {
+    r#"-?[1-9][0-9]*"# => weedle::literal::IntegerLit::Dec(weedle::literal::DecLit(<>)),
+    r#"-?0[Xx][0-9A-Fa-f]+"# => weedle::literal::IntegerLit::Hex(weedle::literal::HexLit(<>)),
+    r#"-?0[0-7]*"# => weedle::literal::IntegerLit::Oct(weedle::literal::OctLit(<>)),
+};
+
+float_literal: weedle::literal::FloatLit<'input> = {
+    r#"/-?(([0-9]+\.[0-9]*|[0-9]*\.[0-9]+)([Ee][+-]?[0-9]+)?|[0-9]+[Ee][+-]?[0-9]+)/"# => weedle::literal::FloatLit::Value(weedle::literal::FloatValueLit(<>)),
+    "-infinity" => weedle::literal::FloatLit::NegInfinity(weedle::term::NegInfinity),
+    "infinity" => weedle::literal::FloatLit::Infinity(weedle::term::Infinity),
+    "NaN" => weedle::literal::FloatLit::NaN(weedle::term::NaN),
+};
+
+const_value: weedle::literal::ConstValue<'input> = {
+    boolean_literal => weedle::literal::ConstValue::Boolean(<>),
+    float_literal => weedle::literal::ConstValue::Float(<>),
+    integer_literal => weedle::literal::ConstValue::Integer(<>),
+    "null" => weedle::literal::ConstValue::Null(weedle::term::Null),
+};
 
 term_qmark: weedle::term::QMark = "?" => weedle::term::QMark;
 term_required: weedle::term::Required = "required" => weedle::term::Required;
@@ -195,6 +279,7 @@ term_BufferSource: weedle::term::BufferSource = "BufferSource" => weedle::term::
 term_comma: weedle::term::Comma = "," => weedle::term::Comma;
 term_undefined: weedle::term::Undefined = "undefined" => weedle::term::Undefined;
 term_optional: weedle::term::Optional = "optional" => weedle::term::Optional;
+term_readonly: weedle::term::ReadOnly = "readonly" => weedle::term::ReadOnly;
 
 dictionary_field = parameter ";";
 
@@ -238,11 +323,11 @@ namespace_member: weedle::namespace::NamespaceMember<'input> = {
             args: args,
             semi_colon: weedle::term::SemiColon,
         }),
-    <attr:extended_attribute_list?> "readonly" "attribute" <type_:attributed_type> <ident:ident_defn> ";"
+    <attr:extended_attribute_list?> <readonly:term_readonly> "attribute" <type_:attributed_type> <ident:ident_defn> ";"
         => weedle::namespace::NamespaceMember::Attribute(weedle::namespace::AttributeNamespaceMember {
             docstring: None,
             attributes: attr,
-            readonly: weedle::term::ReadOnly,
+            readonly: readonly,
             attribute: weedle::term::Attribute,
             type_: type_,
             identifier: ident,
@@ -253,6 +338,15 @@ namespace_member: weedle::namespace::NamespaceMember<'input> = {
 return_type: weedle::types::ReturnType<'input> = {
     term_undefined => weedle::types::ReturnType::Undefined(<>),
     type_defn => weedle::types::ReturnType::Type(<>),
+};
+
+const_type: weedle::types::ConstType<'input> = {
+    MayBeNull<integer_type> => weedle::types::ConstType::Integer(<>),
+    MayBeNull<floating_point_type> => weedle::types::ConstType::FloatingPoint(<>),
+    MayBeNull<term_boolean> => weedle::types::ConstType::Boolean(<>),
+    MayBeNull<term_byte> => weedle::types::ConstType::Byte(<>),
+    MayBeNull<term_octet> => weedle::types::ConstType::Octet(<>),
+    MayBeNull<ident_defn> => weedle::types::ConstType::Identifier(<>),
 };
 
 argument_list = Punctuated<argument>;
@@ -303,8 +397,6 @@ identifier_or_string: weedle::attribute::IdentifierOrString<'input> = {
     string_literal => weedle::attribute::IdentifierOrString::String(<>),
 };
 
-interface = docstring? "callback"? attribute? "interface" ident "{" function* "}" ";";
-
 typedef = attribute? "typedef" type_ ident ";";
 
 type_: () = {
@@ -320,7 +412,6 @@ generic_type_list: () = {
 literal: () = {
     "[" literal_array "]",
     string_literal,
-    boolean_literal,
     "null",
     // decimal_literal,
     // hex_literal,
@@ -330,10 +421,6 @@ literal: () = {
 // match everything between "" except "^
 string_literal: weedle::literal::StringLit<'input> = r#""[^"]*""# => weedle::literal::StringLit(<>);
 
-boolean_literal: () = {
-    "true",
-    "false",
-};
 literal_array: () = {
     literal_array "," literal,
     literal,
@@ -341,7 +428,6 @@ literal_array: () = {
 };
 // decimal_literal = r"-?[0-9]*";
 // hex_literal = r"-?0x[0-9a-fA-F]*";
-float_literal = r"-?[0-9]+\.[0-9]+";
 
 // Name identifier. The additional tokens must be manually listed to be
 // considered valid identifiers.
