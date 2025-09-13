@@ -75,6 +75,7 @@ interface: weedle::InterfaceDefinition<'input> = <attr:extended_attribute_list?>
 inheritance: weedle::interface::Inheritance<'input> = ":" <ident_defn> => weedle::interface::Inheritance { colon: weedle::term::Colon, identifier: <> };
 
 interface_member: weedle::interface::InterfaceMember<'input> = {
+    // const member
     <attr:extended_attribute_list?> "const" <const_type:const_type> <ident:ident_defn> "=" <const_value:const_value> ";"
         => weedle::interface::InterfaceMember::Const(weedle::interface::ConstMember {
             attributes: attr,
@@ -86,6 +87,7 @@ interface_member: weedle::interface::InterfaceMember<'input> = {
             semi_colon: weedle::term::SemiColon,
         }),
 
+    // attribute
     <attr:extended_attribute_list?> <modifier:stringifier_or_inherit_or_static?> <readonly:term_readonly?> "attribute" <type_:attributed_type> <ident:ident_defn> ";"
         => weedle::interface::InterfaceMember::Attribute(weedle::interface::AttributeInterfaceMember {
             attributes: attr,
@@ -94,6 +96,95 @@ interface_member: weedle::interface::InterfaceMember<'input> = {
             attribute: weedle::term::Attribute,
             type_: type_,
             identifier: ident,
+            semi_colon: weedle::term::SemiColon,
+        }),
+
+    // constructor
+    <attr:extended_attribute_list?> "constructor" <args:Parenthesized<argument_list>> ";"
+        => weedle::interface::InterfaceMember::Constructor(weedle::interface::ConstructorInterfaceMember {
+            docstring: None,
+            attributes: attr,
+            constructor: weedle::term::Constructor,
+            args: args,
+            semi_colon: weedle::term::SemiColon,
+        }),
+
+    // operation
+    <attr:extended_attribute_list?> <modifier:stringifier_or_static?> <special:special?> <return_type:return_type> <ident:ident_defn?> <args:Parenthesized<argument_list>> ";"
+        => weedle::interface::InterfaceMember::Operation(weedle::interface::OperationInterfaceMember {
+            docstring: None,
+            attributes: attr,
+            modifier: modifier,
+            special: special,
+            return_type: return_type,
+            identifier: ident,
+            args: args,
+            semi_colon: weedle::term::SemiColon,
+        }),
+
+    // iterable single-typed
+    <attr:extended_attribute_list?> "iterable" <generics:Generics<attributed_type>> ";"
+        => weedle::interface::InterfaceMember::Iterable(weedle::interface::IterableInterfaceMember::Single(weedle::interface::SingleTypedIterable {
+            attributes: attr,
+            iterable: weedle::term::Iterable,
+            generics: generics,
+            semi_colon: weedle::term::SemiColon,
+        })),
+
+    // iterable double-typed
+    <attr:extended_attribute_list?> "iterable" <generics:Generics<(attributed_type term_comma attributed_type)>> ";"
+        => weedle::interface::InterfaceMember::Iterable(weedle::interface::IterableInterfaceMember::Double(weedle::interface::DoubleTypedIterable {
+            attributes: attr,
+            iterable: weedle::term::Iterable,
+            generics: generics,
+            semi_colon: weedle::term::SemiColon,
+        })),
+
+    // async iterable single-typed
+    <attr:extended_attribute_list?> "async" "iterable" <generics:Generics<attributed_type>> <args:Parenthesized<argument_list>?> ";"
+        => weedle::interface::InterfaceMember::AsyncIterable(weedle::interface::AsyncIterableInterfaceMember::Single(weedle::interface::SingleTypedAsyncIterable {
+            attributes: attr,
+            async_iterable: (weedle::term::Async, weedle::term::Iterable),
+            generics: generics,
+            args: args,
+            semi_colon: weedle::term::SemiColon,
+        })),
+
+    // async iterable double-typed
+    <attr:extended_attribute_list?> "async" "iterable" <generics:Generics<(attributed_type term_comma attributed_type)>> <args:Parenthesized<argument_list>?> ";"
+        => weedle::interface::InterfaceMember::AsyncIterable(weedle::interface::AsyncIterableInterfaceMember::Double(weedle::interface::DoubleTypedAsyncIterable {
+            attributes: attr,
+            async_iterable: (weedle::term::Async, weedle::term::Iterable),
+            generics: generics,
+            args: args,
+            semi_colon: weedle::term::SemiColon,
+        })),
+
+    // maplike
+    <attr:extended_attribute_list?> <readonly:term_readonly?> "maplike" <generics:Generics<(attributed_type term_comma attributed_type)>> ";"
+        => weedle::interface::InterfaceMember::Maplike(weedle::interface::MaplikeInterfaceMember {
+            attributes: attr,
+            readonly: readonly,
+            maplike: weedle::term::Maplike,
+            generics: generics,
+            semi_colon: weedle::term::SemiColon,
+        }),
+
+    // setlike
+    <attr:extended_attribute_list?> <readonly:term_readonly?> "setlike" <generics:Generics<attributed_type>> ";"
+        => weedle::interface::InterfaceMember::Setlike(weedle::interface::SetlikeInterfaceMember {
+            attributes: attr,
+            readonly: readonly,
+            setlike: weedle::term::Setlike,
+            generics: generics,
+            semi_colon: weedle::term::SemiColon,
+        }),
+
+    // stringifier
+    <attr:extended_attribute_list?> "stringifier" <generics:Generics<attributed_type>> ";"
+        => weedle::interface::InterfaceMember::Stringifier(weedle::interface::StringifierMember {
+            attributes: attr,
+            stringifier: weedle::term::Stringifier,
             semi_colon: weedle::term::SemiColon,
         }),
 };
@@ -323,6 +414,7 @@ namespace_member: weedle::namespace::NamespaceMember<'input> = {
             args: args,
             semi_colon: weedle::term::SemiColon,
         }),
+
     <attr:extended_attribute_list?> <readonly:term_readonly> "attribute" <type_:attributed_type> <ident:ident_defn> ";"
         => weedle::namespace::NamespaceMember::Attribute(weedle::namespace::AttributeNamespaceMember {
             docstring: None,
